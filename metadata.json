@@ -1,0 +1,7 @@
+{
+  "name": "Body3DMetric",
+  "description": "Body measurement and 3D reconstruction tool using AI to estimate dimensions from a single photo.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
