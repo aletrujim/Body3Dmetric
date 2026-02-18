@@ -156,7 +156,7 @@ const App: React.FC = () => {
             <div className="mb-8 relative">
               <div className="absolute inset-0 bg-indigo-500/20 blur-3xl rounded-full" />
               <img 
-                src="https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=800" 
+                src="https://raw.githubusercontent.com/aletrujim/Body3Dmetric/faba062d7909df797d406c27bd53f0373234e341/components/result_Body3DMetric.png" 
                 alt="Body Scan Visualization" 
                 className="relative rounded-3xl shadow-2xl border border-slate-700 w-full object-cover aspect-square"
               />
@@ -225,7 +225,7 @@ const App: React.FC = () => {
             <div className="grid md:grid-cols-2 gap-6 mb-8">
               <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                 <div className="aspect-square mb-4 bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden border border-indigo-500/30">
-                  <img src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&q=80&w=400" alt="Instrucción Postura" className="opacity-70 object-cover h-full" />
+                  <img src="https://raw.githubusercontent.com/aletrujim/Body3Dmetric/faba062d7909df797d406c27bd53f0373234e341/components/posture.png" alt="Instrucción Postura" className="opacity-70 object-cover h-full" />
                 </div>
                 <h4 className="font-bold mb-2">Instrucciones</h4>
                 <ul className="text-sm text-slate-400 text-left space-y-2">
