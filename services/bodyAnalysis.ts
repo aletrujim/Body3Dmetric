@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResponse } from "../types";
 
-export const analyzeBodyImage = async (base64Image: string, userHeight: number): Promise<AnalysisResponse> => {
+export const analyzeBodyImage = async (base64Image: string, userHeight: number, userAge: number): Promise<AnalysisResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
@@ -17,13 +17,16 @@ export const analyzeBodyImage = async (base64Image: string, userHeight: number):
         },
         {
           text: `Analyze this full-body photo for 3D reconstruction. 
-          The user is standing in a T-pose or A-pose.
-          Calculate the following width ratios relative to the total height of the person in the image:
+          The user is ${userAge} years old and ${userHeight}cm tall.
+          Calculate the following width ratios relative to the total height of the person in the image.
+          Use the age and height as context for body fat distribution (biometrics).
+          
           1. waistWidth / totalHeight
           2. hipWidth / totalHeight
           3. shoulderWidth / totalHeight
           4. chestWidth / totalHeight
           5. torsoHeight (from neck base to hips) / totalHeight
+          
           Return only the JSON data.`
         }
       ],

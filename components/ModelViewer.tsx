@@ -1,14 +1,19 @@
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter';
 import { BodyMeasurements } from '../types';
 
 interface ModelViewerProps {
   measurements: BodyMeasurements;
 }
 
-const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
+export interface ModelViewerHandle {
+  exportToOBJ: () => void;
+}
+
+const ModelViewer = forwardRef<ModelViewerHandle, ModelViewerProps>(({ measurements }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<{
     scene: THREE.Scene;
@@ -17,6 +22,23 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
     controls: OrbitControls;
     modelGroup: THREE.Group;
   } | null>(null);
+
+  // Expose export function to parent
+  useImperativeHandle(ref, () => ({
+    exportToOBJ: () => {
+      if (!sceneRef.current) return;
+      const exporter = new OBJExporter();
+      const result = exporter.parse(sceneRef.current.modelGroup);
+      const blob = new Blob([result], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.href = URL.createObjectURL(blob);
+      link.download = 'Body3DMetric_Scan.obj';
+      link.click();
+      document.body.removeChild(link);
+    }
+  }));
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -28,7 +50,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
     scene.background = new THREE.Color(0x0f172a);
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 1.5, 4);
+    camera.position.set(0, 1.2, 3.5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
@@ -39,17 +61,16 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
     controls.enableDamping = true;
     controls.target.set(0, 1, 0);
 
-    // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(5, 10, 5);
-    scene.add(dirLight);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    mainLight.position.set(5, 10, 7);
+    scene.add(mainLight);
 
-    const backLight = new THREE.PointLight(0x6366f1, 1);
-    backLight.position.set(-5, 2, -5);
-    scene.add(backLight);
+    const rimLight = new THREE.DirectionalLight(0x6366f1, 0.5);
+    rimLight.position.set(-5, 5, -5);
+    scene.add(rimLight);
 
     const modelGroup = new THREE.Group();
     scene.add(modelGroup);
@@ -84,7 +105,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
     if (!sceneRef.current) return;
     const { modelGroup } = sceneRef.current;
     
-    // Clear previous model
     while (modelGroup.children.length > 0) {
       modelGroup.remove(modelGroup.children[0]);
     }
@@ -97,75 +117,88 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
       hipWidth 
     } = measurements;
 
-    // Scale factor: assume 2 meters height fits in the screen nicely at 1 unit = 1 meter
     const scaleFactor = userHeight / 100;
     
-    // Create body silhouette points for LatheGeometry
-    // These points define the Y, X profile of the body
+    // Improved Anatomical Silhouette Profile
     const points: THREE.Vector2[] = [];
-    const segments = 20;
     
-    // Simple parametric mannequin profile based on ratios
-    // Height units in meters (0 to scaleFactor)
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments; // normalized height 0 to 1
-      const y = t * scaleFactor;
-      let x = 0.15; // default radius
+    // Key proportions based on anthropometric landmarks
+    const landmarks = [
+      { t: 0.00, r: 0.00 },                         // Ground
+      { t: 0.10, r: hipWidth * 0.4 },               // Ankle/Base
+      { t: 0.35, r: hipWidth * 0.45 },              // Knees area
+      { t: 0.45, r: hipWidth * 0.5 },               // Widest Hips
+      { t: 0.58, r: waistWidth * 0.5 },             // Narrowest Waist
+      { t: 0.72, r: chestWidth * 0.5 },             // Full Chest
+      { t: 0.80, r: shoulderWidth * 0.5 },          // Shoulders
+      { t: 0.83, r: 0.045 * scaleFactor },          // Neck Base
+      { t: 0.86, r: 0.040 * scaleFactor },          // Mid Neck
+    ];
 
-      if (t < 0.1) { // Feet/Ankles
-        x = 0.08 * scaleFactor;
-      } else if (t < 0.45) { // Legs to Hips
-        const legT = (t - 0.1) / 0.35;
-        x = THREE.MathUtils.lerp(0.08, hipWidth / 2, legT);
-      } else if (t < 0.55) { // Waist
-        const waistT = (t - 0.45) / 0.1;
-        x = THREE.MathUtils.lerp(hipWidth / 2, waistWidth / 2, waistT);
-      } else if (t < 0.75) { // Chest
-        const chestT = (t - 0.55) / 0.2;
-        x = THREE.MathUtils.lerp(waistWidth / 2, chestWidth / 2, chestT);
-      } else if (t < 0.9) { // Shoulders/Neck
-        const shoulderT = (t - 0.75) / 0.15;
-        x = THREE.MathUtils.lerp(shoulderWidth / 2, 0.06 * scaleFactor, shoulderT);
-      } else { // Head
-        const headT = (t - 0.9) / 0.1;
-        x = Math.sqrt(1 - Math.pow((headT - 0.5) * 2, 2)) * 0.1 * scaleFactor;
+    // Smooth spline-like interpolation (linear for simplicity but with higher point density)
+    const density = 40;
+    for (let i = 0; i <= density; i++) {
+      const currentT = i / density;
+      
+      // Find segments
+      let r = 0;
+      for (let j = 0; j < landmarks.length - 1; j++) {
+        if (currentT >= landmarks[j].t && currentT <= landmarks[j+1].t) {
+          const localT = (currentT - landmarks[j].t) / (landmarks[j+1].t - landmarks[j].t);
+          r = THREE.MathUtils.lerp(landmarks[j].r, landmarks[j+1].r, localT);
+          break;
+        }
       }
 
-      points.push(new THREE.Vector2(x, y));
+      // Handle the head separately to ensure it looks like a head
+      if (currentT > 0.86) {
+        const headT = (currentT - 0.86) / (1.0 - 0.86);
+        const headRadius = 0.08 * scaleFactor;
+        // Profile of a sphere centered at the top
+        r = Math.sqrt(Math.max(0, 1 - Math.pow((headT * 2 - 1), 2))) * headRadius;
+        if (isNaN(r)) r = 0.005;
+      }
+      
+      points.push(new THREE.Vector2(r, currentT * scaleFactor));
     }
 
-    const geometry = new THREE.LatheGeometry(points, 32);
-    // Flatten the body slightly to make it more human-like (less cylindrical)
+    const geometry = new THREE.LatheGeometry(points, 48);
+    // Depth scaling to differentiate between front/back and side silhouettes
     geometry.scale(1, 1, 0.7);
     
-    const material = new THREE.MeshPhongMaterial({ 
-      color: 0x4f46e5, 
-      wireframe: true,
+    const material = new THREE.MeshStandardMaterial({ 
+      color: 0x6366f1, 
+      roughness: 0.3,
+      metalness: 0.2,
       transparent: true,
-      opacity: 0.8,
-      emissive: 0x1e1b4b
+      opacity: 0.85,
     });
-    
-    const bodyMesh = new THREE.Mesh(geometry, material);
-    modelGroup.add(bodyMesh);
 
-    // Measuring Tapes (Visual Lines)
-    const createTape = (yPos: number, radiusX: number, radiusZ: number, label: string) => {
-      const curve = new THREE.EllipseCurve(0, 0, radiusX, radiusZ, 0, 2 * Math.PI, false, 0);
-      const points = curve.getPoints(50);
-      const tapeGeom = new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(p.x, yPos, p.y)));
-      const tapeMat = new THREE.LineBasicMaterial({ color: 0x22d3ee, linewidth: 2 });
-      const tapeLine = new THREE.Line(tapeGeom, tapeMat);
-      modelGroup.add(tapeLine);
+    const mesh = new THREE.Mesh(geometry, material);
+    modelGroup.add(mesh);
+
+    // Measuring Tapes (UX Highlights)
+    const createTape = (yPos: number, rx: number, rz: number, color: number) => {
+      const curve = new THREE.EllipseCurve(0, 0, rx, rz, 0, 2 * Math.PI, false, 0);
+      const pts = curve.getPoints(64);
+      const tapeGeom = new THREE.BufferGeometry().setFromPoints(pts.map(p => new THREE.Vector3(p.x, yPos, p.y)));
+      const tapeMat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.8 });
+      const line = new THREE.Line(tapeGeom, tapeMat);
+      modelGroup.add(line);
     };
 
-    // Waist Tape
-    createTape(0.5 * scaleFactor, waistWidth / 2 + 0.01, (waistWidth / 2) * 0.7 + 0.01, "Cintura");
-    // Hip Tape
-    createTape(0.4 * scaleFactor, hipWidth / 2 + 0.01, (hipWidth / 2) * 0.7 + 0.01, "Cadera");
+    // Anatomically placed visual aids
+    createTape(0.72 * scaleFactor, (chestWidth / 2) + 0.005, (chestWidth / 2) * 0.7 + 0.005, 0xec4899); // Chest (pink)
+    createTape(0.58 * scaleFactor, (waistWidth / 2) + 0.005, (waistWidth / 2) * 0.7 + 0.005, 0x22d3ee); // Waist (cyan)
+    createTape(0.45 * scaleFactor, (hipWidth / 2) + 0.005, (hipWidth / 2) * 0.7 + 0.005, 0x818cf8);   // Hips (indigo)
 
-    // Center model
-    modelGroup.position.y = -scaleFactor / 2;
+    // Floor Grid
+    const grid = new THREE.GridHelper(6, 30, 0x334155, 0x1e293b);
+    grid.position.y = 0;
+    modelGroup.add(grid);
+
+    // Center the model vertically in the view
+    modelGroup.position.y = -0.45 * scaleFactor;
 
   }, [measurements]);
 
@@ -173,13 +206,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ measurements }) => {
     <div className="relative w-full h-full min-h-[400px] bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700">
       <div ref={containerRef} className="w-full h-full" />
       <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
-        <div className="bg-cyan-500/20 border border-cyan-500/50 backdrop-blur-md px-3 py-1 rounded text-cyan-300 text-sm font-bold flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          MODO ESCANEO 3D ACTIVO
+        <div className="bg-indigo-500/20 border border-indigo-500/50 backdrop-blur-md px-3 py-1 rounded text-indigo-300 text-[10px] font-bold flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+          ANÁLISIS VOLUMÉTRICO REFINADO
         </div>
       </div>
     </div>
   );
-};
+});
 
 export default ModelViewer;

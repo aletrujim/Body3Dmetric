@@ -2,6 +2,7 @@
 export interface BodyMeasurements {
   height: number; // in cm
   weight: number; // in kg
+  age: number;    // in years
   waistWidth: number; // relative 0-1 (meters for ThreeJS)
   hipWidth: number; // relative 0-1 (meters for ThreeJS)
   shoulderWidth: number; // relative 0-1
